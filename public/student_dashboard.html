@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Student Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      margin: 2rem;
+      max-width: 1100px;
+    }
+    .bar {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:1.5rem;
+    }
+    .card {
+      border:1px solid #ddd;
+      border-radius:12px;
+      padding:1rem;
+      margin-bottom:1rem;
+    }
+    h2, h3 {
+      margin:0 0 .5rem 0;
+    }
+    .muted {
+      color:#666;
+      font-size:.9rem;
+    }
+    .help {
+      font-size:.8rem;
+      color:#777;
+      margin-top:.25rem;
+    }
+    button {
+      padding:.6rem 1rem;
+      border:none;
+      border-radius:8px;
+      background:#222;
+      color:#fff;
+      cursor:pointer;
+    }
+    .btn-light {
+      background:#f3f3f3;
+      color:#222;
+      border:1px solid #ddd;
+    }
+    table {
+      width:100%;
+      border-collapse: collapse;
+      margin-top:.75rem;
+    }
+    th, td {
+      padding:.5rem;
+      border-bottom:1px solid #eee;
+      text-align:left;
+      font-size:.9rem;
+    }
+    tr:hover {
+      background:#fafafa;
+    }
+    td.actions {
+      white-space:nowrap;
+    }
+    select, input[type="datetime-local"] {
+      padding:.45rem .7rem;
+      border:1px solid #ccc;
+      border-radius:8px;
+      min-width:220px;
+    }
+    form {
+      display:flex;
+      gap:.5rem;
+      flex-wrap:wrap;
+      margin-top:.5rem;
+    }
+    .pill {
+      display:inline-block;
+      padding:0.1rem 0.5rem;
+      border-radius:999px;
+      background:#f3f3f3;
+      margin-right:.25rem;
+      font-size:.8rem;
+    }
+    #classes_msg, #att_msg, #recent_msg {
+      margin-top:.35rem;
+      min-height:1rem;
+      font-size:.85rem;
+    }
+    .status-present {
+      color:#0a7;
+      font-weight:600;
+    }
+    .status-absent {
+      color:#a00;
+      font-weight:600;
+    }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <div>
+      <h2>Student Dashboard</h2>
+      <div class="muted">Welcome, <span id="username"></span></div>
+    </div>
+    <div>
+      <button id="logoutBtn" title="Sign out of the application">Logout</button>
+    </div>
+  </div>
+
+  <!-- My Classes -->
+  <div class="card">
+    <h3>My Classes</h3>
+    <div class="muted">These are the classes you are enrolled in.</div>
+    <div class="help">
+      Tip: Select a class to view detailed attendance history in the next section.
+    </div>
+
+    <div id="classes_msg" class="muted"></div>
+
+    <table id="classesTable" aria-live="polite">
+      <thead>
+        <tr>
+          <th>Class</th>
+          <th>Teacher</th>
+          <th>Attendance</th>
+          <th>Total Sessions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- Attendance Details -->
+  <div class="card">
+    <h3>Attendance Details</h3>
+    <div class="muted">
+      View your attendance for a specific class. Present/Absent is based on whether you checked in for each session.
+    </div>
+    <div class="help">
+      Tip: You can optionally filter by date range. If you leave dates blank, all sessions for that class are shown.
+    </div>
+
+    <form id="attFilterForm">
+      <select id="att_class_select" required title="Pick a class to see your attendance">
+        <option value="">Select a class…</option>
+      </select>
+      <input id="att_from" type="datetime-local" title="Start date/time (optional)" />
+      <input id="att_to" type="datetime-local" title="End date/time (optional)" />
+      <button type="submit" class="btn-light" title="Load your attendance history for this class">Load</button>
+      <button type="button" id="exportStudentBtn" class="btn-light" title="Download your attendance as CSV for this class">
+        Export My Attendance (CSV)
+      </button>
+    </form>
+
+    <div id="att_summary" class="muted" style="margin-top:.35rem;"></div>
+    <div id="att_msg" class="muted"></div>
+
+    <table id="attTable" aria-live="polite">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Description</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- Recent Check-ins -->
+  <div class="card">
+    <h3>Recent Check-ins</h3>
+    <div class="muted">
+      Your most recent successful check-ins.
+    </div>
+    <div class="help">
+      Tip: If you just scanned a QR code, you should see it appear here shortly.
+    </div>
+
+    <div id="recent_msg" class="muted"></div>
+
+    <table id="recentTable" aria-live="polite">
+      <thead>
+        <tr>
+          <th>Class</th>
+          <th>Session</th>
+          <th>Checked At</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    // ---- auth guard & identity ----
+    const role = localStorage.getItem('role');
+    const name = localStorage.getItem('name');
+    const studentId = parseInt(localStorage.getItem('user_id') || '0', 10);
+
+    if (role !== 'student' || !studentId) {
+      // adjust to your actual base; using the same base as teacher dashboard
+      window.location.replace('/qrattendanceapp/index.php');
+    } else {
+      document.getElementById('username').textContent = name || 'Student';
+    }
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      localStorage.clear();
+      window.location.replace('/qrattendanceapp/index.php');
+    });
+
+    // ---- elements ----
+    const classesBody = document.querySelector('#classesTable tbody');
+    const classesMsg  = document.getElementById('classes_msg');
+
+    const attClassSelect = document.getElementById('att_class_select');
+    const attFrom        = document.getElementById('att_from');
+    const attTo          = document.getElementById('att_to');
+    const attMsg         = document.getElementById('att_msg');
+    const attSummary     = document.getElementById('att_summary');
+    const attBody        = document.querySelector('#attTable tbody');
+    const exportStudentBtn = document.getElementById('exportStudentBtn');
+
+    const recentBody = document.querySelector('#recentTable tbody');
+    const recentMsg  = document.getElementById('recent_msg');
+
+    function toMySQLDateTime(localVal) {
+      if (!localVal) return null;
+      const d = new Date(localVal);
+      if (isNaN(d)) return null;
+      const pad = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+    }
+
+    // ========== My Classes ==========
+    function classesEmptyTemplate() {
+      return `<tr><td colspan="4" class="muted">You are not enrolled in any classes yet.</td></tr>`;
+    }
+
+    function classRowTemplate(c) {
+      const total = c.total_sessions ?? 0;
+      const present = c.present_count ?? 0;
+      const pct = total > 0 ? Math.round((present / total) * 100) : 0;
+      return `
+        <tr data-class="${c.class_id}">
+          <td>${c.class_name}</td>
+          <td>${c.teacher_name ?? ''}</td>
+          <td>${pct}% (${present}/${total})</td>
+          <td>${total}</td>
+        </tr>
+      `;
+    }
+
+    async function loadMyClasses(populateSelect = true) {
+      classesMsg.textContent = 'Loading classes...';
+      classesBody.innerHTML = '';
+      try {
+        const resp = await fetch(`/qrattendanceapp/api/student.php?action=my_classes&student_id=${studentId}`);
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || 'Failed to load classes');
+
+        const classes = data.classes || [];
+        if (!classes.length) {
+          classesBody.innerHTML = classesEmptyTemplate();
+          classesMsg.textContent = '';
+          if (populateSelect) {
+            attClassSelect.innerHTML = '<option value="">Select a class…</option>';
+          }
+          return;
+        }
+
+        classesBody.innerHTML = classes.map(classRowTemplate).join('');
+        classesMsg.textContent = '';
+
+        if (populateSelect) {
+          const opts = classes
+            .map(c => `<option value="${c.class_id}">${c.class_name}</option>`)
+            .join('');
+          attClassSelect.innerHTML = '<option value="">Select a class…</option>' + opts;
+        }
+      } catch (err) {
+        classesMsg.textContent = 'Error: ' + err.message;
+        classesBody.innerHTML = classesEmptyTemplate();
+      }
+    }
+
+    // click on row loads attendance for that class
+    classesBody.addEventListener('click', (e) => {
+      const tr = e.target.closest('tr[data-class]');
+      if (!tr) return;
+      const classId = tr.getAttribute('data-class');
+      attClassSelect.value = classId;
+      document.getElementById('attFilterForm').dispatchEvent(new Event('submit'));
+      // scroll to attendance card
+      const attTable = document.getElementById('attTable');
+      if (attTable) {
+        const rect = attTable.getBoundingClientRect();
+        window.scrollTo({ top: rect.top + window.scrollY - 80, behavior: 'smooth' });
+      }
+    });
+
+    // ========== Attendance Details ==========
+    function attEmptyTemplate() {
+      return `<tr><td colspan="3" class="muted">No sessions found for this selection.</td></tr>`;
+    }
+
+    function attRowTemplate(r) {
+      const statusClass = r.status === 'present' ? 'status-present' : 'status-absent';
+      const label = r.status === 'present' ? 'Present' : 'Absent';
+      const dt = r.session_date || '';
+      const desc = r.description || '';
+      return `
+        <tr>
+          <td>${dt}</td>
+          <td>${desc}</td>
+          <td><span class="${statusClass}">${label}</span></td>
+        </tr>
+      `;
+    }
+
+    async function loadAttendance() {
+      const classId = parseInt(attClassSelect.value || '0', 10);
+      attBody.innerHTML = '';
+      attSummary.textContent = '';
+      attMsg.textContent = '';
+
+      if (!classId) {
+        attBody.innerHTML = attEmptyTemplate();
+        return;
+      }
+
+      const from = toMySQLDateTime(attFrom.value);
+      const to   = toMySQLDateTime(attTo.value);
+
+      const params = new URLSearchParams({
+        action: 'attendance',
+        student_id: String(studentId),
+        class_id: String(classId)
+      });
+      if (from) params.set('date_from', from);
+      if (to)   params.set('date_to', to);
+
+      attMsg.textContent = 'Loading attendance...';
+
+      try {
+        const resp = await fetch(`/qrattendanceapp/api/student.php?${params.toString()}`);
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || 'Failed to load attendance');
+
+        const sessions = data.sessions || [];
+        if (!sessions.length) {
+          attBody.innerHTML = attEmptyTemplate();
+          attMsg.textContent = '';
+          return;
+        }
+
+        attBody.innerHTML = sessions.map(attRowTemplate).join('');
+        attMsg.textContent = '';
+
+        // summary if provided
+        if (data.summary) {
+          const s = data.summary;
+          const total = s.total_sessions ?? sessions.length;
+          const present = s.present ?? 0;
+          const absent = s.absent ?? Math.max(0, total - present);
+          const pct = total > 0 ? Math.round((present / total) * 100) : 0;
+          attSummary.innerHTML = `
+            <span class="pill">Total sessions: ${total}</span>
+            <span class="pill">Present: ${present}</span>
+            <span class="pill">Absent: ${absent}</span>
+            <span class="pill">Overall: ${pct}%</span>
+          `;
+        } else {
+          attSummary.textContent = '';
+        }
+      } catch (err) {
+        attMsg.textContent = 'Error: ' + err.message;
+        attBody.innerHTML = attEmptyTemplate();
+      }
+    }
+
+    document.getElementById('attFilterForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      loadAttendance();
+    });
+
+    // Student CSV export
+    exportStudentBtn.addEventListener('click', () => {
+      const classId = parseInt(attClassSelect.value || '0', 10);
+      if (!classId) {
+        attMsg.textContent = 'Select a class first.';
+        return;
+      }
+
+      const from = toMySQLDateTime(attFrom.value);
+      const to   = toMySQLDateTime(attTo.value);
+
+      const params = new URLSearchParams({
+        action: 'student_csv',
+        student_id: String(studentId),
+        class_id: String(classId)
+      });
+      if (from) params.set('date_from', from);
+      if (to)   params.set('date_to', to);
+
+      const url = `/qrattendanceapp/api/export.php?${params.toString()}`;
+      window.open(url, '_blank');
+    });
+
+    // ========== Recent Check-ins ==========
+    function recentEmptyTemplate() {
+      return `<tr><td colspan="3" class="muted">No recent check-ins.</td></tr>`;
+    }
+
+    function recentRowTemplate(r) {
+      const cls = r.class_name || '';
+      const desc = r.session_description || r.description || '';
+      const when = r.checked_at || '';
+      return `
+        <tr>
+          <td>${cls}</td>
+          <td>${desc}</td>
+          <td>${when}</td>
+        </tr>
+      `;
+    }
+
+    async function loadRecent() {
+      recentMsg.textContent = 'Loading recent check-ins...';
+      recentBody.innerHTML = '';
+      try {
+        const resp = await fetch(`/qrattendanceapp/api/student.php?action=recent&student_id=${studentId}`);
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || 'Failed to load recent');
+
+        const rows = data.checkins || [];
+        if (!rows.length) {
+          recentBody.innerHTML = recentEmptyTemplate();
+        } else {
+          recentBody.innerHTML = rows.map(recentRowTemplate).join('');
+        }
+        recentMsg.textContent = '';
+      } catch (err) {
+        recentMsg.textContent = 'Error: ' + err.message;
+        recentBody.innerHTML = recentEmptyTemplate();
+      }
+    }
+
+    // initial load
+    loadMyClasses(true);
+    loadRecent();
+  </script>
+</body>
+</html>

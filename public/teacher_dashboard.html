@@ -1,0 +1,950 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Teacher Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 2rem; }
+    .bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; }
+    .card { border:1px solid #ddd; border-radius:12px; padding:1rem; margin-bottom:1rem; max-width: 1100px; }
+    form { display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.5rem; }
+    input[type="text"], input[type="email"], select, input[type="datetime-local"] {
+      padding:.55rem .7rem; border:1px solid #ccc; border-radius:8px; min-width:260px;
+    }
+    button { padding:.6rem 1rem; border:none; border-radius:8px; background:#222; color:#fff; cursor:pointer; }
+    .btn-light { background:#f3f3f3; color:#222; border:1px solid #ddd; }
+    table { width:100%; border-collapse: collapse; margin-top:.75rem; }
+    th, td { padding:.55rem; border-bottom:1px solid #eee; text-align:left; }
+    td.actions { width: 1%; white-space: nowrap; }
+    .muted { color:#666; font-size:.9rem; }
+    #msg, #roster_msg, #sessions_msg, #att_msg, #hist_msg { margin-top:.5rem; min-height:1.25rem; }
+    .inline-edit { display:flex; gap:.4rem; align-items:center; }
+    .inline-edit input { min-width:220px; }
+    .status-open { color: #0a7; font-weight: 600; }
+    .status-closed { color: #a00; font-weight: 600; }
+    .qr-panel { display:flex; gap:1rem; align-items:flex-start; margin-top: .75rem; }
+    .qr-box { border:1px solid #eee; border-radius:10px; padding: .75rem; }
+    .qr-meta { font-size:.9rem; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .pill { display:inline-block; padding:0.1rem 0.5rem; border-radius:999px; background:#f3f3f3; margin-right:.25rem; font-size:.8rem; }
+    .help { font-size:.8rem; color:#777; margin-top:.25rem; }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <div>
+      <h2>Teacher Dashboard</h2>
+      <div class="muted">Welcome, <span id="username"></span></div>
+    </div>
+    <div><button id="logoutBtn" title="Sign out of the application">Logout</button></div>
+  </div>
+
+  <!-- Classes -->
+  <div class="card">
+    <h3>Classes</h3>
+    <div class="muted">Create and manage your classes.</div>
+    <div class="help">Tip: Class names should be short but unique (e.g., "CS101 - Fall").</div>
+
+    <form id="classForm">
+      <input id="class_name" type="text" placeholder="Class name (e.g., CS101)" required title="Name of the course or section" />
+      <button type="submit" title="Create a new class">Add Class</button>
+    </form>
+
+    <div id="msg" class="muted"></div>
+
+    <table id="classTable" aria-live="polite">
+      <thead>
+        <tr><th>Name</th><th>Created By</th><th class="actions">Actions</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- Roster -->
+  <div class="card">
+    <h3>Roster</h3>
+    <div class="muted">Select a class, then add a student by email (student must already exist as an app user).</div>
+    <div class="help">Tip: If a student cannot be added, confirm they have registered and chosen the <strong>student</strong> role.</div>
+
+    <form id="rosterClassForm">
+      <select id="roster_class_select" required title="Class whose roster you want to view">
+        <option value="">Select a class…</option>
+      </select>
+      <button type="submit" class="btn-light" title="Load the enrolled students for this class">Load Roster</button>
+    </form>
+
+    <form id="rosterAddForm">
+      <input id="student_email" type="email" placeholder="student@example.com" required title="Email of the student (must match their account)" />
+      <button type="submit" title="Add this student to the class roster">Add Student</button>
+    </form>
+
+    <div id="roster_msg" class="muted"></div>
+
+    <table id="rosterTable" aria-live="polite">
+      <thead>
+        <tr><th>Name</th><th>Email</th><th>Enrolled</th><th class="actions">Actions</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- Sessions (+ QR) -->
+  <div class="card">
+    <h3>Sessions</h3>
+    <div class="muted">Create an attendance session for a class, then open/close it or generate a QR token / CSV export.</div>
+    <div class="help">
+      Tip: Each session represents one class meeting (e.g., "Week 3 Lecture"). You can generate a QR code so students can check in on their phones.
+    </div>
+
+    <form id="sessionClassForm">
+      <select id="session_class_select" required title="Class to view or manage sessions for">
+        <option value="">Select a class…</option>
+      </select>
+      <button type="submit" class="btn-light" title="Load all sessions for the selected class">Load Sessions</button>
+    </form>
+
+    <form id="sessionCreateForm">
+      <input id="session_description" type="text" placeholder="Optional description (e.g., Week 3 Lecture)" title="Short label for this meeting (optional)" />
+      <input id="session_datetime" type="datetime-local" required title="Date and time of the session" />
+      <button type="submit" title="Create a new session for this class">Create Session</button>
+    </form>
+
+    <div id="sessions_msg" class="muted"></div>
+
+    <table id="sessionsTable" aria-live="polite">
+      <thead>
+        <tr><th>Description</th><th>Date/Time</th><th>Status</th><th class="actions">Actions</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <!-- QR display panel -->
+    <div id="qrPanel" class="qr-panel" style="display:none;">
+      <div class="qr-box">
+        <img id="qrImage" alt="QR code" width="220" height="220" />
+      </div>
+      <div class="qr-meta">
+        <div><strong>Session:</strong> <span id="qrSessionId"></span></div>
+        <div><strong>Token:</strong> <span id="qrToken" class="mono"></span></div>
+        <div><strong>Expires:</strong> <span id="qrExpires"></span></div>
+        <div style="margin-top:.5rem;">
+          <button id="qrCopyBtn" class="btn-light" title="Copy the raw token string">Copy Token</button>
+        </div>
+        <div class="help" style="margin-top:.5rem;">
+          Students scan the QR code with their phone. They must be signed in as a student on their device.
+          Only one active QR token exists per session; generating a new one invalidates the old one.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Attendance -->
+  <div class="card">
+    <h3>Attendance</h3>
+    <div class="muted">Pick a class and session to view who’s present/absent.</div>
+    <div class="help">
+      Tip: You can make manual corrections within 24 hours of the session. After 24 hours, the record is locked and changes are logged in the audit trail.
+    </div>
+
+    <form id="attClassForm">
+      <select id="att_class_select" required title="Class whose attendance you want to view">
+        <option value="">Select a class…</option>
+      </select>
+      <select id="att_session_select" required title="Specific session to review">
+        <option value="">Select a session…</option>
+      </select>
+      <button type="submit" class="btn-light" title="Load the attendance list for this session">Load Attendance</button>
+    </form>
+
+    <div id="att_msg" class="muted"></div>
+
+    <table id="attTable" aria-live="polite">
+      <thead>
+        <tr>
+          <th>Student</th>
+          <th>Email</th>
+          <th>Status</th>
+          <th>Checked At</th>
+          <th class="actions">Edit</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <!-- Attendance exports -->
+    <div style="margin-top:.5rem; display:flex; gap:.5rem; flex-wrap:wrap;">
+      <button type="button" id="exportSessionBtn" class="btn-light" title="Download CSV for this session">Export Session CSV</button>
+    </div>
+
+    <hr style="margin:1rem 0; border:none; border-top:1px solid #eee;" />
+
+    <div class="muted">Export Class History (optionally choose a date range):</div>
+    <div class="help">Tip: Use this to send summary data to your LMS or save a backup.</div>
+    <form id="historyExportForm">
+      <input id="hist_from" type="datetime-local" title="Start date/time (optional)" />
+      <input id="hist_to" type="datetime-local" title="End date/time (optional)" />
+      <label class="muted" style="display:flex; align-items:center; gap:.35rem;">
+        <input id="hist_absent" type="checkbox" />
+        Include absentees
+      </label>
+      <button type="submit" class="btn-light" title="Download CSV for all sessions in this range">Export Class CSV</button>
+    </form>
+  </div>
+
+  <!-- History & Summary -->
+  <div class="card">
+    <h3>History & Summary</h3>
+    <div class="muted">See all sessions for a class with counts of present/absent students.</div>
+    <div class="help">Tip: Filter by date or search by description to quickly find a session, then jump into the detailed attendance view.</div>
+
+    <form id="histForm2">
+      <select id="hist_class_select" required title="Class whose history you want to see">
+        <option value="">Select a class…</option>
+      </select>
+      <input id="hist2_from" type="datetime-local" title="Start date/time filter (optional)" />
+      <input id="hist2_to" type="datetime-local" title="End date/time filter (optional)" />
+      <input id="hist_search" type="text" placeholder="Search description/date…" title="Search text in descriptions and dates" />
+      <button type="submit" class="btn-light" title="Load summary rows for this class">Load History</button>
+    </form>
+
+    <div id="hist_msg" class="muted"></div>
+
+    <table id="histTable" aria-live="polite">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Description</th>
+          <th>Status</th>
+          <th>Present</th>
+          <th>Absent</th>
+          <th>Total</th>
+          <th class="actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    // ====== CONFIG FOR QR LINKS ON PHONES ======
+    const SERVER_BASE = 'http://10.5.21.129';
+
+    // ---- guard ----
+    const role = localStorage.getItem('role');
+    const name = localStorage.getItem('name');
+    const teacherId = parseInt(localStorage.getItem('user_id') || '0', 10);
+    if (role !== 'teacher' || !teacherId) { window.location.replace('/qrattendanceapp/index.php'); }
+    document.getElementById('username').textContent = name || 'Teacher';
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      localStorage.clear(); window.location.replace('/qrattendanceapp/index.php');
+    });
+
+    // Elements
+    const msg   = document.getElementById('msg');
+    const tbody = document.querySelector('#classTable tbody');
+
+    const rosterMsg   = document.getElementById('roster_msg');
+    const rosterBody  = document.querySelector('#rosterTable tbody');
+    const rosterSelect= document.getElementById('roster_class_select');
+
+    const sessionsMsg   = document.getElementById('sessions_msg');
+    const sessionsBody  = document.querySelector('#sessionsTable tbody');
+    const sessionSelect = document.getElementById('session_class_select');
+    const sessionDesc   = document.getElementById('session_description');
+    const sessionDT     = document.getElementById('session_datetime');
+
+    const qrPanel   = document.getElementById('qrPanel');
+    const qrImage   = document.getElementById('qrImage');
+    const qrToken   = document.getElementById('qrToken');
+    const qrExpires = document.getElementById('qrExpires');
+    const qrSessionId = document.getElementById('qrSessionId');
+    const qrCopyBtn = document.getElementById('qrCopyBtn');
+
+    const attMsg = document.getElementById('att_msg');
+    const attBody = document.querySelector('#attTable tbody');
+    const attClassSelect = document.getElementById('att_class_select');
+    const attSessionSelect = document.getElementById('att_session_select');
+
+    const exportSessionBtn = document.getElementById('exportSessionBtn');
+    const histFormExport = document.getElementById('historyExportForm');
+    const histFrom = document.getElementById('hist_from');
+    const histTo   = document.getElementById('hist_to');
+    const histAbsent = document.getElementById('hist_absent');
+
+    const histForm2 = document.getElementById('histForm2');
+    const histClassSelect = document.getElementById('hist_class_select');
+    const histFrom2 = document.getElementById('hist2_from');
+    const histTo2   = document.getElementById('hist2_to');
+    const histSearch = document.getElementById('hist_search');
+    const histMsg = document.getElementById('hist_msg');
+    const histBody = document.querySelector('#histTable tbody');
+
+    let pendingAttSessionId = null; // used when jumping from History → Attendance
+
+    function toMySQLDateTime(localVal) {
+      if (!localVal) return null;
+      const d = new Date(localVal);
+      if (isNaN(d)) return null;
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+    }
+
+    // ---------- Classes ----------
+    function classRowTemplate(c) {
+      return `
+        <tr data-id="${c.class_id}">
+          <td class="name">${c.class_name}</td>
+          <td>${name || 'You'}</td>
+          <td class="actions">
+            <button class="btn-light" data-edit title="Rename this class">Rename</button>
+            <button data-del title="Permanently delete this class and its sessions">Delete</button>
+          </td>
+        </tr>
+      `;
+    }
+    function classEmptyTemplate() {
+      return `<tr><td colspan="3" class="muted">No classes yet. Add your first class above.</td></tr>`;
+    }
+
+    async function loadClasses(populateSelectors = true) {
+      msg.textContent = 'Loading classes...';
+      tbody.innerHTML = '';
+      try {
+        const r = await fetch(`/qrattendanceapp/api/classes.php?action=list&teacher_id=${teacherId}`);
+        const data = await r.json();
+        if (!data.success) throw new Error(data.error || 'Failed to load');
+
+        const rows = data.classes || [];
+        if (!rows.length) {
+          tbody.innerHTML = classEmptyTemplate();
+          if (populateSelectors) {
+            const base = `<option value="">Select a class…</option>`;
+            rosterSelect.innerHTML  = base;
+            sessionSelect.innerHTML = base;
+            attClassSelect.innerHTML = base;
+            histClassSelect.innerHTML = base;
+          }
+        } else {
+          tbody.innerHTML = rows.map(classRowTemplate).join('');
+          if (populateSelectors) {
+            const opts = rows.map(c => `<option value="${c.class_id}">${c.class_name}</option>`).join('');
+            const base = `<option value="">Select a class…</option>`;
+            rosterSelect.innerHTML  = base + opts;
+            sessionSelect.innerHTML = base + opts;
+            attClassSelect.innerHTML = base + opts;
+            histClassSelect.innerHTML = base + opts;
+          }
+        }
+        msg.textContent = '';
+      } catch (e) {
+        msg.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    document.getElementById('classForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const className = document.getElementById('class_name').value.trim();
+      if (!className) { msg.textContent = 'Class name is required.'; return; }
+      msg.textContent = 'Creating...';
+      try {
+        const r = await fetch('/qrattendanceapp/api/classes.php?action=create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teacher_id: teacherId, class_name: className })
+        });
+        const data = await r.json();
+        if (!data.success) throw new Error(data.error || 'Failed to create');
+        e.target.reset();
+        await loadClasses(true);
+        msg.textContent = 'Class created.';
+      } catch (e2) {
+        msg.textContent = 'Error: ' + e2.message;
+      }
+    });
+
+    tbody.addEventListener('click', async (e) => {
+      const tr = e.target.closest('tr[data-id]');
+      if (!tr) return;
+      const classId = parseInt(tr.getAttribute('data-id'), 10);
+
+      // Delete
+      if (e.target.closest('button[data-del]')) {
+        if (!confirm('Delete this class and all related data?')) return;
+        msg.textContent = 'Deleting...';
+        try {
+          const r = await fetch('/qrattendanceapp/api/classes.php?action=delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teacher_id: teacherId, class_id: classId })
+          });
+          const data = await r.json();
+          if (!data.success) throw new Error(data.error || 'Failed to delete');
+          await loadClasses(true);
+          msg.textContent = 'Deleted.';
+          if (rosterSelect.value == String(classId)) { rosterSelect.value = ''; rosterBody.innerHTML = ''; }
+          if (sessionSelect.value == String(classId)) { sessionSelect.value = ''; sessionsBody.innerHTML = ''; }
+          if (attClassSelect.value == String(classId)) {
+            attClassSelect.value = '';
+            attSessionSelect.innerHTML = '<option value="">Select a session…</option>';
+            attBody.innerHTML = '';
+          }
+          if (histClassSelect.value == String(classId)) {
+            histClassSelect.value = '';
+            histBody.innerHTML = '';
+          }
+        } catch (e2) {
+          msg.textContent = 'Error: ' + e2.message;
+        }
+        return;
+      }
+
+      // Rename
+      if (e.target.closest('button[data-edit]')) {
+        const currentName = tr.querySelector('.name').textContent.trim();
+        tr.innerHTML = `
+          <td colspan="3">
+            <div class="inline-edit">
+              <input type="text" id="rename_input_${classId}" value="${currentName}" />
+              <button data-save title="Save new class name">Save</button>
+              <button class="btn-light" data-cancel title="Cancel rename">Cancel</button>
+            </div>
+          </td>
+        `;
+        return;
+      }
+
+      // Save rename
+      if (e.target.closest('button[data-save]')) {
+        const input = tr.querySelector('input[id^="rename_input_"]');
+        const newName = (input?.value || '').trim();
+        if (!newName) { alert('Class name is required.'); return; }
+        msg.textContent = 'Saving...';
+        try {
+          const r = await fetch('/qrattendanceapp/api/classes.php?action=update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teacher_id: teacherId, class_id: classId, class_name: newName })
+          });
+          const data = await r.json();
+          if (!data.success) throw new Error(data.error || 'Failed to update');
+          await loadClasses(true);
+          msg.textContent = 'Updated.';
+        } catch (e2) {
+          msg.textContent = 'Error: ' + e2.message;
+        }
+        return;
+      }
+
+      // Cancel rename
+      if (e.target.closest('button[data-cancel]')) {
+        await loadClasses(true);
+        msg.textContent = '';
+        return;
+      }
+    });
+
+    // ---------- Roster ----------
+    function rosterRowTemplate(s) {
+      return `
+        <tr data-student="${s.student_id}">
+          <td>${s.name}</td>
+          <td>${s.email}</td>
+          <td>${s.date_enrolled ?? ''}</td>
+          <td class="actions"><button data-remove title="Remove this student from the class">Remove</button></td>
+        </tr>
+      `;
+    }
+    function rosterEmptyTemplate() {
+      return `<tr><td colspan="4" class="muted">No students enrolled yet.</td></tr>`;
+    }
+    async function loadRoster() {
+      const classId = parseInt(rosterSelect.value || '0', 10);
+      if (!classId) { rosterBody.innerHTML = rosterEmptyTemplate(); rosterMsg.textContent = ''; return; }
+      rosterMsg.textContent = 'Loading roster...';
+      rosterBody.innerHTML = '';
+      try {
+        const r = await fetch(`/qrattendanceapp/api/roster.php?action=list&teacher_id=${teacherId}&class_id=${classId}`);
+        const data = await r.json();
+        if (!data.success) throw new Error(data.error || 'Failed to load roster');
+        const rows = data.students || [];
+        rosterBody.innerHTML = rows.length ? rows.map(rosterRowTemplate).join('') : rosterEmptyTemplate();
+        rosterMsg.textContent = '';
+      } catch (e) {
+        rosterMsg.textContent = 'Error: ' + e.message;
+      }
+    }
+    document.getElementById('rosterClassForm').addEventListener('submit', async (e) => {
+      e.preventDefault(); await loadRoster();
+    });
+    document.getElementById('rosterAddForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const classId = parseInt(rosterSelect.value || '0', 10);
+      if (!classId) { rosterMsg.textContent = 'Please select a class first.'; return; }
+      const email = document.getElementById('student_email').value.trim();
+      if (!email) { rosterMsg.textContent = 'Email is required.'; return; }
+      rosterMsg.textContent = 'Adding student...';
+      try {
+        const r = await fetch('/qrattendanceapp/api/roster.php?action=add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teacher_id: teacherId, class_id: classId, email })
+        });
+        const data = await r.json();
+        if (!data.success) throw new Error(data.error || 'Failed to add');
+        e.target.reset();
+        await loadRoster();
+        rosterMsg.textContent = data.message || 'Student added.';
+      } catch (e2) {
+        rosterMsg.textContent = 'Error: ' + e2.message;
+      }
+    });
+    rosterBody.addEventListener('click', async (e) => {
+      const tr = e.target.closest('tr[data-student]');
+      if (!tr) return;
+      const studentId = parseInt(tr.getAttribute('data-student'), 10);
+      const classId = parseInt(rosterSelect.value || '0', 10);
+      if (!e.target.closest('button[data-remove]')) return;
+      if (!confirm('Remove this student from the class?')) return;
+      rosterMsg.textContent = 'Removing...';
+      try {
+        const r = await fetch('/qrattendanceapp/api/roster.php?action=remove', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teacher_id: teacherId, class_id: classId, student_id: studentId })
+        });
+        const data = await r.json();
+        if (!data.success) throw new Error(data.error || 'Failed to remove');
+        await loadRoster();
+        rosterMsg.textContent = 'Removed.';
+      } catch (e2) {
+        rosterMsg.textContent = 'Error: ' + e2.message;
+      }
+    });
+
+    // ---------- Sessions + QR + per-session CSV ----------
+    function sessionsRowTemplate(s) {
+      const statusCls = s.status === 'open' ? 'status-open' : 'status-closed';
+      const niceDT = s.session_date?.replace('T',' ') || s.session_date || '';
+      const qrBtn = (s.status === 'open') ? `<button class="btn-light" data-qr title="Generate a new QR code for student check-in">QR</button>` : '';
+      return `
+        <tr data-session="${s.session_id}">
+          <td>${s.description ?? ''}</td>
+          <td>${niceDT}</td>
+          <td><span class="${statusCls}">${s.status}</span></td>
+          <td class="actions">
+            ${qrBtn}
+            <button class="btn-light" data-export title="Download CSV for this session">CSV</button>
+            <button class="btn-light" data-toggle title="Open or close this session to check-ins">${s.status === 'open' ? 'Close' : 'Open'}</button>
+            <button data-delete title="Delete this session">Delete</button>
+          </td>
+        </tr>
+      `;
+    }
+    function sessionsEmptyTemplate() {
+      return `<tr><td colspan="4" class="muted">No sessions yet.</td></tr>`;
+    }
+    async function loadSessions() {
+      const classId = parseInt(sessionSelect.value || '0', 10);
+      if (!classId) { sessionsBody.innerHTML = sessionsEmptyTemplate(); sessionsMsg.textContent = ''; return; }
+      sessionsMsg.textContent = 'Loading sessions...';
+      sessionsBody.innerHTML = '';
+      try {
+        const r = await fetch(`/qrattendanceapp/api/sessions.php?action=list&teacher_id=${teacherId}&class_id=${classId}`);
+        const data = await r.json();
+        if (!data.success) throw new Error(data.error || 'Failed to load sessions');
+        const rows = data.sessions || [];
+        sessionsBody.innerHTML = rows.length ? rows.map(sessionsRowTemplate).join('') : sessionsEmptyTemplate();
+        sessionsMsg.textContent = '';
+        qrPanel.style.display = 'none';
+      } catch (e) {
+        sessionsMsg.textContent = 'Error: ' + e.message;
+      }
+    }
+    document.getElementById('sessionClassForm').addEventListener('submit', async (e) => {
+      e.preventDefault(); await loadSessions();
+    });
+    document.getElementById('sessionCreateForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const classId = parseInt(sessionSelect.value || '0', 10);
+      if (!classId) { sessionsMsg.textContent = 'Please select a class first.'; return; }
+      const desc = sessionDesc.value.trim();
+      const mysqlDT = toMySQLDateTime(sessionDT.value);
+      if (!mysqlDT) { sessionsMsg.textContent = 'Please choose a valid date/time.'; return; }
+      sessionsMsg.textContent = 'Creating session...';
+      try {
+        const r = await fetch('/qrattendanceapp/api/sessions.php?action=create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teacher_id: teacherId, class_id: classId, description: desc, session_date: mysqlDT })
+        });
+        const data = await r.json();
+        if (!data.success) throw new Error(data.error || 'Failed to create session');
+        sessionDesc.value = '';
+        await loadSessions();
+        sessionsMsg.textContent = 'Session created.';
+      } catch (e2) {
+        sessionsMsg.textContent = 'Error: ' + e2.message;
+      }
+    });
+
+    sessionsBody.addEventListener('click', async (e) => {
+      const tr = e.target.closest('tr[data-session]');
+      if (!tr) return;
+      const sessionId = parseInt(tr.getAttribute('data-session'), 10);
+      const classId = parseInt(sessionSelect.value || '0', 10);
+
+      // Generate QR
+      if (e.target.closest('button[data-qr]')) {
+        const ttl = parseInt(prompt('Minutes until token expires?', '10') || '10', 10);
+        if (!(ttl > 0)) return;
+        sessionsMsg.textContent = 'Creating QR token...';
+        try {
+          const r = await fetch('/qrattendanceapp/api/qr.php?action=create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teacher_id: teacherId, class_id: classId, session_id: sessionId, ttl_minutes: ttl })
+          });
+          const data = await r.json();
+          if (!data.success) throw new Error(data.error || 'Failed to create QR token');
+
+          const base = `${SERVER_BASE}/qrattendanceapp/public/checkin.html?token=${encodeURIComponent(data.token)}`;
+          const qrService = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(base)}`;
+
+          qrImage.src = qrService;
+          qrToken.textContent = data.token;
+          qrExpires.textContent = data.expires;
+          qrSessionId.textContent = String(sessionId);
+          qrPanel.style.display = 'flex';
+
+          sessionsMsg.textContent = 'QR token created (previous token for this session is now invalid).';
+        } catch (e2) {
+          sessionsMsg.textContent = 'Error: ' + e2.message;
+        }
+        return;
+      }
+
+      // Per-session CSV export
+      if (e.target.closest('button[data-export]')) {
+        if (!classId) {
+          sessionsMsg.textContent = 'Select a class first.';
+          return;
+        }
+        const url = `/qrattendanceapp/api/export.php?action=session_csv&teacher_id=${teacherId}&class_id=${classId}&session_id=${sessionId}`;
+        window.open(url, '_blank');
+        return;
+      }
+
+      // Toggle status
+      if (e.target.closest('button[data-toggle]')) {
+        const current = tr.querySelector('span').textContent.trim();
+        const next = current === 'open' ? 'closed' : 'open';
+        sessionsMsg.textContent = `Setting ${next}...`;
+        try {
+          const r = await fetch('/qrattendanceapp/api/sessions.php?action=status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teacher_id: teacherId, class_id: classId, session_id: sessionId, status: next })
+          });
+          const data = await r.json();
+          if (!data.success) throw new Error(data.error || 'Failed to update status');
+          await loadSessions();
+          sessionsMsg.textContent = 'Status updated.';
+        } catch (e2) {
+          sessionsMsg.textContent = 'Error: ' + e2.message;
+        }
+        return;
+      }
+
+      // Delete session
+      if (e.target.closest('button[data-delete]')) {
+        if (!confirm('Delete this session?')) return;
+        sessionsMsg.textContent = 'Deleting...';
+        try {
+          const r = await fetch('/qrattendanceapp/api/sessions.php?action=delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teacher_id: teacherId, class_id: classId, session_id: sessionId })
+          });
+          const data = await r.json();
+          if (!data.success) throw new Error(data.error || 'Failed to delete');
+          await loadSessions();
+          sessionsMsg.textContent = 'Session deleted.';
+          qrPanel.style.display = 'none';
+        } catch (e2) {
+          sessionsMsg.textContent = 'Error: ' + e2.message;
+        }
+        return;
+      }
+    });
+
+    qrCopyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(qrToken.textContent);
+        alert('Token copied to clipboard');
+      } catch {
+        alert('Copy failed—select and copy manually.');
+      }
+    });
+
+    // ---------- Attendance ----------
+    function attEmptyTemplate() {
+      return `<tr><td colspan="5" class="muted">No attendance yet for this session.</td></tr>`;
+    }
+    function attRowTemplate(r) {
+      const statusClass = r.status === 'present' ? 'status-open' : 'status-closed';
+      const when = r.checked_at || '';
+      return `
+        <tr data-student="${r.student_id}">
+          <td>${r.student_name}</td>
+          <td>${r.student_email}</td>
+          <td><span class="${statusClass}">${r.status}</span></td>
+          <td>${when}</td>
+          <td class="actions">
+            <button class="btn-light" data-setstatus="present" title="Mark as present">Present</button>
+            <button data-setstatus="absent" title="Mark as absent">Absent</button>
+          </td>
+        </tr>
+      `;
+    }
+    attClassSelect.addEventListener('change', async () => {
+      const classId = parseInt(attClassSelect.value || '0', 10);
+      attSessionSelect.innerHTML = `<option value="">Select a session…</option>`;
+      attBody.innerHTML = attEmptyTemplate();
+      attMsg.textContent = '';
+      if (!classId) return;
+      try {
+        const r = await fetch(`/qrattendanceapp/api/sessions.php?action=list&teacher_id=${teacherId}&class_id=${classId}`);
+        const data = await r.json();
+        if (!data.success) throw new Error(data.error || 'Failed to load sessions');
+        const sessions = data.sessions || [];
+        if (!sessions.length) {
+          attSessionSelect.innerHTML = `<option value="">No sessions yet</option>`;
+        } else {
+          const opts = sessions
+            .map(s => `<option value="${s.session_id}">${(s.description || 'Session')} – ${s.session_date}</option>`)
+            .join('');
+          attSessionSelect.innerHTML = `<option value="">Select a session…</option>` + opts;
+        }
+
+        if (pendingAttSessionId) {
+          const target = String(pendingAttSessionId);
+          const found = Array.from(attSessionSelect.options).some(o => o.value === target);
+          if (found) {
+            attSessionSelect.value = target;
+            pendingAttSessionId = null;
+            await loadAttendance();
+            const attCard = document.getElementById('attTable');
+            if (attCard) {
+              const rect = attCard.getBoundingClientRect();
+              window.scrollTo({ top: rect.top + window.scrollY - 80, behavior: 'smooth' });
+            }
+          }
+        }
+      } catch (e) {
+        attMsg.textContent = 'Error: ' + e.message;
+      }
+    });
+
+    async function loadAttendance() {
+      const classId = parseInt(attClassSelect.value || '0', 10);
+      const sessionId = parseInt(attSessionSelect.value || '0', 10);
+      attBody.innerHTML = '';
+      if (!classId || !sessionId) { attBody.innerHTML = attEmptyTemplate(); attMsg.textContent = ''; return; }
+      attMsg.textContent = 'Loading attendance...';
+      try {
+        const r = await fetch(`/qrattendanceapp/api/attendance.php?action=list&teacher_id=${teacherId}&class_id=${classId}&session_id=${sessionId}`);
+        const data = await r.json();
+        if (!data.success) throw new Error(data.error || 'Failed to load attendance');
+        const rows = data.records || [];
+        attBody.innerHTML = rows.length ? rows.map(attRowTemplate).join('') : attEmptyTemplate();
+        attMsg.textContent = '';
+      } catch (e) {
+        attMsg.textContent = 'Error: ' + e.message;
+      }
+    }
+    document.getElementById('attClassForm').addEventListener('submit', async (e) => {
+      e.preventDefault(); await loadAttendance();
+    });
+
+    // Manual overrides (present/absent) with 24h rule
+    attBody.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-setstatus]');
+      if (!btn) return;
+      const newStatus = btn.getAttribute('data-setstatus');
+      const tr = btn.closest('tr[data-student]');
+      if (!tr) return;
+      const studentId = parseInt(tr.getAttribute('data-student'), 10);
+      const classId = parseInt(attClassSelect.value || '0', 10);
+      const sessionId = parseInt(attSessionSelect.value || '0', 10);
+      if (!classId || !sessionId || !studentId) {
+        attMsg.textContent = 'Select class and session first.';
+        return;
+      }
+
+      attMsg.textContent = 'Saving override...';
+      try {
+        const r = await fetch('/qrattendanceapp/api/attendance.php?action=override', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            teacher_id: teacherId,
+            class_id: classId,
+            session_id: sessionId,
+            student_id: studentId,
+            status: newStatus
+          })
+        });
+        const data = await r.json();
+        if (!data.success) {
+          attMsg.textContent = data.error || 'Override failed.';
+          return;
+        }
+        await loadAttendance();
+        attMsg.textContent = data.message || 'Attendance updated.';
+      } catch (err) {
+        attMsg.textContent = 'Error: ' + err.message;
+      }
+    });
+
+    // Export current session CSV (Attendance card)
+    exportSessionBtn.addEventListener('click', () => {
+      const classId = parseInt(attClassSelect.value || '0', 10);
+      const sessionId = parseInt(attSessionSelect.value || '0', 10);
+      if (!classId || !sessionId) {
+        attMsg.textContent = 'Select a class and session first.';
+        return;
+      }
+      const url = `/qrattendanceapp/api/export.php?action=session_csv&teacher_id=${teacherId}&class_id=${classId}&session_id=${sessionId}`;
+      window.open(url, '_blank');
+    });
+
+    // Export class history CSV (Attendance card)
+    histFormExport.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const classId = parseInt(attClassSelect.value || '0', 10);
+      if (!classId) {
+        attMsg.textContent = 'Select a class first.';
+        return;
+      }
+      const from = toMySQLDateTime(histFrom.value);
+      const to   = toMySQLDateTime(histTo.value);
+      const absent = histAbsent.checked ? 1 : 0;
+
+      const params = new URLSearchParams({
+        action: 'class_csv',
+        teacher_id: String(teacherId),
+        class_id: String(classId),
+        include_absent: String(absent)
+      });
+      if (from) params.set('date_from', from);
+      if (to)   params.set('date_to', to);
+
+      const url = `/qrattendanceapp/api/export.php?${params.toString()}`;
+      window.open(url, '_blank');
+    });
+
+    // ---------- History & Summary ----------
+    function histEmptyTemplate() {
+      return `<tr><td colspan="7" class="muted">No sessions found for this selection.</td></tr>`;
+    }
+    function histRowTemplate(s) {
+      const statusCls = s.status === 'open' ? 'status-open' : 'status-closed';
+      const dt = s.session_date || '';
+      const desc = s.description || '';
+      return `
+        <tr data-session="${s.session_id}">
+          <td>${dt}</td>
+          <td>${desc}</td>
+          <td><span class="${statusCls}">${s.status}</span></td>
+          <td>${s.present}</td>
+          <td>${s.absent}</td>
+          <td>${s.total}</td>
+          <td class="actions">
+            <button class="btn-light" data-view title="Open detailed attendance for this session">View Attendance</button>
+          </td>
+        </tr>
+      `;
+    }
+
+    async function loadHistory() {
+      const classId = parseInt(histClassSelect.value || '0', 10);
+      histBody.innerHTML = '';
+      histMsg.textContent = '';
+      if (!classId) {
+        histMsg.textContent = 'Select a class.';
+        histBody.innerHTML = histEmptyTemplate();
+        return;
+      }
+
+      const from = toMySQLDateTime(histFrom2.value);
+      const to   = toMySQLDateTime(histTo2.value);
+      const params = new URLSearchParams({
+        action: 'sessions',
+        teacher_id: String(teacherId),
+        class_id: String(classId)
+      });
+      if (from) params.set('date_from', from);
+      if (to)   params.set('date_to', to);
+
+      histMsg.textContent = 'Loading history...';
+      try {
+        const r = await fetch(`/qrattendanceapp/api/history.php?${params.toString()}`);
+        const data = await r.json();
+        if (!data.success) throw new Error(data.error || 'Failed to load history');
+
+        let sessions = data.sessions || [];
+        const q = histSearch.value.trim().toLowerCase();
+        if (q) {
+          sessions = sessions.filter(s => {
+            const hay = ((s.description || '') + ' ' + (s.session_date || '')).toLowerCase();
+            return hay.includes(q);
+          });
+        }
+
+        if (!sessions.length) {
+          histBody.innerHTML = histEmptyTemplate();
+        } else {
+          histBody.innerHTML = sessions.map(histRowTemplate).join('');
+        }
+
+        if (data.totals) {
+          const t = data.totals;
+          histMsg.innerHTML = `
+            <span class="pill">Sessions: ${t.total_sessions}</span>
+            <span class="pill">Present: ${t.total_present}</span>
+            <span class="pill">Absent: ${t.total_absent}</span>
+          `;
+        } else {
+          histMsg.textContent = '';
+        }
+      } catch (e) {
+        histMsg.textContent = 'Error: ' + e.message;
+        histBody.innerHTML = histEmptyTemplate();
+      }
+    }
+
+    histForm2.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await loadHistory();
+    });
+
+    histBody.addEventListener('click', (e) => {
+      const tr = e.target.closest('tr[data-session]');
+      if (!tr) return;
+      const sessionId = parseInt(tr.getAttribute('data-session'), 10);
+      const classId = parseInt(histClassSelect.value || '0', 10);
+      if (!sessionId || !classId) return;
+
+      if (e.target.closest('button[data-view]')) {
+        attClassSelect.value = String(classId);
+        pendingAttSessionId = sessionId;
+        attClassSelect.dispatchEvent(new Event('change'));
+      }
+    });
+
+    // initial load
+    loadClasses(true);
+  </script>
+</body>
+</html>
